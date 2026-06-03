@@ -1,0 +1,72 @@
+name: Benchmark
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Generate BenchmarkData.cs
+        run: bash generate.sh
+
+      - name: Build (Release)
+        run: dotnet build Benchmark.csproj -c Release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            BenchmarkData.cs
+            bin/
+
+  bench-net9:
+    name: Benchmark (net9.0)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output
+
+      - name: Run benchmark
+        run: dotnet run --project Benchmark.csproj -c Release --framework net9.0 --no-build
+
+  bench-net10:
+    name: Benchmark (net10.0)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output
+
+      - name: Run benchmark
+        run: dotnet run --project Benchmark.csproj -c Release --framework net10.0 --no-build
