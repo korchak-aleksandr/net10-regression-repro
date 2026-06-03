@@ -1,0 +1,50 @@
+Running with gitlab-runner 17.6.0 (374d34fd)
+  on gitlab-runner-small-v2-644c485968-769zw dDoxCnU6M, system ID: r_q3oHRvJQXYIz
+  feature flags: FF_TIMESTAMPS:true
+Resolving secrets
+section_start:1780426928:prepare_executor
+Preparing the "kubernetes" executor
+Using Kubernetes namespace: gitlab-runner
+Using Kubernetes executor with image mcr.microsoft.com/dotnet/sdk:10.0 ...
+Using attach strategy to execute scripts...
+section_end:1780426928:prepare_executor
+section_start:1780426928:prepare_script
+Preparing environment
+Using FF_USE_POD_ACTIVE_DEADLINE_SECONDS, the Pod activeDeadlineSeconds will be set to the job timeout: 1h0m0s...
+Waiting for pod gitlab-runner/runner-ddoxcnu6m-project-3248-concurrent-2-s5zlmpf7 to be running, status is Pending
+Waiting for pod gitlab-runner/runner-ddoxcnu6m-project-3248-concurrent-2-s5zlmpf7 to be running, status is Pending
+	ContainersNotInitialized: "containers with incomplete status: [init-permissions]"
+	ContainersNotReady: "containers with unready status: [build helper]"
+	ContainersNotReady: "containers with unready status: [build helper]"
+Running on runner-ddoxcnu6m-project-3248-concurrent-2-s5zlmpf7 via gitlab-runner-small-v2-644c485968-769zw...
+
+section_end:1780426935:prepare_script
+section_start:1780426935:get_sources
+Getting source from Git repository
+Fetching changes with git depth set to 20...
+Initialized empty Git repository in /builds/development/net10-regression-repro/.git/
+Created fresh repository.
+Checking out 17a38ed7 as detached HEAD (ref is refs/merge-requests/3/head)...
+
+Skipping Git submodules setup
+
+section_end:1780426936:get_sources
+section_start:1780426936:download_artifacts
+Downloading artifacts
+Downloading artifacts for build (21794784)...
+Downloading artifacts from coordinator... ok        host=mindbox.gitlab.yandexcloud.net id=21794784 responseStatus=200 OK token=glcbt-64
+
+section_end:1780426937:download_artifacts
+section_start:1780426937:step_script
+Executing "step_script" stage of the job script
+$ dotnet run --project Benchmark.csproj -c Release --framework net10.0 --no-build
+[.NET 10.0.8] 1000 types, 20 workers, 20000 ops
+Running ... 53971 ms
+
+section_end:1780426993:step_script
+section_start:1780426993:cleanup_file_variables
+Cleaning up project directory and file based variables
+
+section_end:1780426993:cleanup_file_variables
+
+Job succeeded

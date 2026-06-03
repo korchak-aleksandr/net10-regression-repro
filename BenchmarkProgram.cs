@@ -23,7 +23,7 @@ var queries = BenchmarkData.Queries; // typed lambdas, one per entity type
 // Warm up the thread pool
 ThreadPool.SetMinThreads(Workers, Workers);
 
-Console.WriteLine($"[.NET {Environment.Version}] {queries.Length} types, {Workers} workers, {Ops} ops");
+Console.WriteLine($"[.NET {Environment.Version}] {queries.Length} types, {Workers} workers, {Ops} ops, {Environment.ProcessorCount} logical CPUs");
 Console.Write("Running ... ");
 
 var sw = Stopwatch.StartNew();

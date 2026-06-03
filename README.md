@@ -28,12 +28,19 @@ dotnet run --project Benchmark.csproj -c Release --framework net9.0  --no-build
 dotnet run --project Benchmark.csproj -c Release --framework net10.0 --no-build
 ```
 
-**CI results (GitHub Actions / Ubuntu):**
+**CI results — Kubernetes pod, ~8 logical CPUs ([full logs](ci-logs/)):**
 
-| Runtime | Time    | Regression |
-|---------|---------|------------|
-| net9.0  | ~27 390 ms | —       |
-| net10.0 | ~53 971 ms | **2x** |
+| Runtime | Time | Regression |
+|---------|------|------------|
+| net9.0  | 27 390 ms | — |
+| net10.0 | 53 971 ms | **2x** |
+
+> **Note: regression magnitude scales with CPU count.**
+> The `GenericsHelpers` lock contention grows with the number of threads competing simultaneously.
+> On GitHub Actions `ubuntu-latest` (2 vCPU) the regression is ~1.2x.
+> On an 8-vCPU Kubernetes pod (logs above) it is **2x**.
+> In the production monolith on a 32-core machine it reaches **7x**.
+> The benchmark prints logical CPU count in its output for easy comparison.
 
 ---
 
@@ -92,3 +99,4 @@ The Linux bottleneck is in the `GenericsHelpers` family, a **different code path
 | `BenchmarkProgram.cs` | Entry point — runs 20 parallel workers × 20 000 ops |
 | `Benchmark.csproj` | Targets `net9.0` and `net10.0` |
 | `BenchmarkData.cs` | Auto-generated, not committed |
+| [`ci-logs/`](ci-logs/) | Full CI job logs from the Kubernetes run showing **2x regression** |
