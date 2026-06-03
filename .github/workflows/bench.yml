@@ -20,8 +20,11 @@ jobs:
       - name: Generate BenchmarkData.cs
         run: bash generate.sh
 
+      - name: Build
+        run: dotnet build Benchmark.csproj -c Release --framework net9.0
+
       - name: Run benchmark
-        run: dotnet run --project Benchmark.csproj -c Release --framework net9.0
+        run: dotnet run --project Benchmark.csproj -c Release --framework net9.0 --no-build
 
   bench-net10:
     name: Benchmark (net10.0)
@@ -37,5 +40,8 @@ jobs:
       - name: Generate BenchmarkData.cs
         run: bash generate.sh
 
+      - name: Build
+        run: dotnet build Benchmark.csproj -c Release --framework net10.0
+
       - name: Run benchmark
-        run: dotnet run --project Benchmark.csproj -c Release --framework net10.0
+        run: dotnet run --project Benchmark.csproj -c Release --framework net10.0 --no-build
