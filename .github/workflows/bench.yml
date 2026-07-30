@@ -38,6 +38,39 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Show installed runtimes
+        run: dotnet --list-runtimes
+
+      - name: Generate BenchmarkData.cs
+        run: bash generate.sh
+
+      - name: Build
+        run: dotnet build Benchmark.csproj -c Release --framework net10.0
+
+      - name: Run benchmark
+        run: dotnet run --project Benchmark.csproj -c Release --framework net10.0 --no-build
+
+  bench-net10-daily:
+    name: Benchmark (net10.0, daily release/10.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Daily build of the release/10.0 servicing branch.
+      # NOTE: the "10.0.1xx" band is required — the default "10.0" channel
+      # currently resolves to SDK 10.0.3xx, which still bundles runtime 10.0.10
+      # and therefore does NOT contain the fix under test.
+      # 10.0.1xx daily bundles runtime 10.0.12-servicing, which includes
+      # https://github.com/dotnet/runtime/pull/129592 (merged 2026-07-20).
+      - name: Setup .NET 10 daily
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.1xx"
+          dotnet-quality: "daily"
+
+      - name: Show installed runtimes
+        run: dotnet --list-runtimes
+
       - name: Generate BenchmarkData.cs
         run: bash generate.sh
 
