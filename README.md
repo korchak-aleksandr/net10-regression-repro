@@ -1,14 +1,64 @@
-# .NET 10 JIT Regression Repro — GenericsHelpers Lock Contention on Linux
+# .NET 10 Regression Repros
 
-Minimal standalone benchmark reproducing a throughput regression on .NET 10 vs .NET 9 in parallel LINQ workloads on Linux.
+Minimal standalone benchmarks reproducing .NET 10 vs .NET 9 regressions, found while migrating a ~18 700-test MSTest suite from .NET 9 to .NET 10.
 
-Tracked in: [dotnet/runtime#123124](https://github.com/dotnet/runtime/issues/123124)
+| Repro | Regression | Status |
+|-------|------------|--------|
+| [`linq-stub-pgo/`](linq-stub-pgo/) | Dynamic PGO over-inlining into `DynamicMethod` | **Open** — [#127203](https://github.com/dotnet/runtime/issues/127203), milestone 12.0.0 |
+| [`generics-helpers-lock/`](generics-helpers-lock/) | `GenericsHelpers` lock contention under parallel LINQ | Fix shipped in 10.0.12 — [#123124](https://github.com/dotnet/runtime/issues/123124) still open |
 
 ---
 
-## Background
+# 1. Dynamic PGO Over-Inlining into DynamicMethod
 
-We hit the same issue on our monolith project after upgrading from .NET 9 to .NET 10.
+**Status:** open, tracked in [dotnet/runtime#127203](https://github.com/dotnet/runtime/issues/127203) (milestone 12.0.0 — no servicing fix for 10.0.x yet).
+
+An in-memory `IQueryable` stub, of the kind used to fake a database in unit tests. Single-threaded: the regression does not depend on core count, unlike repro 2.
+
+## Results
+
+| Runtime | us/query | Factor |
+|---------|----------|--------|
+| .NET 9.0.2 | 300 | — |
+| .NET 10.0.8 | 3 730 | **12.4x** |
+| .NET 10.0.8 + `DOTNET_TieredPGO=0` | 280 | 0.9x |
+
+macOS arm64, 5 rounds of 2 000 queries, steady state. On Linux x64 (.NET 9.0.20 vs .NET 10.0.12) the same repro gives 968 vs 9 380 us/query, and 1 146 with `DOTNET_TieredPGO=0`.
+
+Setting `DOTNET_TieredPGO=0` on .NET 9 changes nothing (278 us/query), so the flag is not a general speed-up — it specifically removes this regression.
+
+## How to Run
+
+```sh
+cd linq-stub-pgo
+dotnet build LinqStubPgo.csproj -c Release
+dotnet bin/Release/net9.0/LinqStubPgo.dll
+dotnet bin/Release/net10.0/LinqStubPgo.dll
+DOTNET_TieredPGO=0 dotnet bin/Release/net10.0/LinqStubPgo.dll
+```
+
+## What Happens
+
+Every query runs through `EnumerableQuery`, which `Expression.Compile()`s a fresh lambda into a `DynamicMethod`.
+
+`DynamicMethod`s do not participate in tiering and are always compiled in FullOpts. On .NET 10 the JIT trusts the synthesized profile of such a method. The callees (`Queryable.Where`, `Queryable.SingleOrDefault`, the `Expression.Call` factories) are hot by then and carry Dynamic PGO data, so the inliner pulls hundreds of them into the lambda.
+
+For the same `closure => Queryable.SingleOrDefault(Queryable.Where(src, p1), p2)` lambda (50 bytes of IL):
+
+- net9: **202 bytes** of machine code, two `call`s inside.
+- net10: **7 135 bytes**, reported as `71 inlinees with PGO data; 138 single block inlinees; 16 inlinees without PGO data`.
+
+On the real test suite this showed up as a 3.5x slowdown that survived the 10.0.12 fix for repro 2, and that `DOTNET_TieredPGO=0` removed entirely.
+
+---
+
+# 2. GenericsHelpers Lock Contention under Parallel LINQ
+
+**Status:** [PR #129592](https://github.com/dotnet/runtime/pull/129592) shipped in **10.0.12**. [dotnet/runtime#123124](https://github.com/dotnet/runtime/issues/123124) is still open. Our suite was still 3.5x slower on 10.0.12 — but that remainder turned out to be repro 1 above, a different regression.
+
+A throughput regression in parallel LINQ workloads on Linux.
+
+## Background
 
 Test suite: ~18 700 MSTest tests (not xUnit)
 
@@ -22,18 +72,17 @@ The slowdown made CI completely impractical for every MR on this monolith, so we
 
 This benchmark distills the regression to ~50 lines of code.
 
----
-
 ## How to Run
 
 ```sh
+cd generics-helpers-lock
 bash generate.sh          # generates BenchmarkData.cs (1000 entity types)
 dotnet build Benchmark.csproj -c Release
 dotnet run --project Benchmark.csproj -c Release --framework net9.0  --no-build
 dotnet run --project Benchmark.csproj -c Release --framework net10.0 --no-build
 ```
 
-**CI results — Kubernetes pod, 24 logical CPUs ([full logs](ci-logs/)):**
+**CI results — Kubernetes pod, 24 logical CPUs ([full logs](generics-helpers-lock/ci-logs/)):**
 
 | Runtime | Time | Regression |
 |---------|------|------------|
@@ -46,8 +95,6 @@ dotnet run --project Benchmark.csproj -c Release --framework net10.0 --no-build
 > On a 24-vCPU Kubernetes pod (logs above) it is **2x**.
 > On 32-core GitLab CI workers running the full test suite it reaches **~6x**.
 > The benchmark prints logical CPU count in its output for easy comparison.
-
----
 
 ## What the Benchmark Does
 
@@ -65,8 +112,6 @@ List<EntityN>.AsQueryable()
 JIT compiles a new `DynamicMethod` → acquires the **GenericsHelpers** lock to resolve the generic type handle for `EntityN`.
 
 With 1000 unique entity types × 20 parallel workers, this creates continuous lock contention throughout the run.
-
----
 
 ## Root Cause (dotnet-trace Analysis)
 
@@ -103,8 +148,6 @@ the monolith uses compiled assembly types (loaded from disk), which go through `
 The benchmark uses pre-compiled entity types generated by `generate.sh`, which go through `Class(int,int)`.
 Same underlying `GenericsHelpers` lock — two different call sites.
 
----
-
 ## Connection to the Windows Fix
 
 Windows PR [#126331](https://github.com/dotnet/runtime/pull/126331) fixed `UnwindInfoTable::AddToUnwindInfoTable` lock contention — not relevant on Linux.
@@ -112,12 +155,17 @@ The Linux bottleneck is in the `GenericsHelpers` family, a **different code path
 
 ---
 
-## Repository Structure
+# Repository Structure
 
-| File | Description |
-|------|-------------|
-| `generate.sh` | Generates `BenchmarkData.cs` — 1000 entity classes + one typed LINQ lambda per type |
-| `BenchmarkProgram.cs` | Entry point — runs 20 parallel workers × 20 000 ops |
-| `Benchmark.csproj` | Targets `net9.0` and `net10.0` |
-| `BenchmarkData.cs` | Auto-generated, not committed |
-| [`ci-logs/`](ci-logs/) | Full CI job logs from the Kubernetes run showing **2x regression** |
+```
+linq-stub-pgo/          repro 1 — single-threaded, in-memory IQueryable stub
+  Program.cs
+  LinqStubPgo.csproj      net9.0 / net10.0
+generics-helpers-lock/  repro 2 — 20 parallel workers x 20 000 ops
+  BenchmarkProgram.cs
+  Benchmark.csproj        net9.0 / net10.0
+  generate.sh             generates BenchmarkData.cs (1000 entity types, not committed)
+  ci-logs/                CI job logs from the 24-vCPU Kubernetes run
+```
+
+Each repro has its own workflow under `.github/workflows/` and runs on every push and pull request.
