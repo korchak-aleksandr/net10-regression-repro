@@ -17,15 +17,18 @@ An in-memory `IQueryable` stub, of the kind used to fake a database in unit test
 
 ## Results
 
+GitHub Actions `ubuntu-latest` (4 vCPU), mean of rounds 1-4, two consecutive runs:
+
 | Runtime | us/query | Factor |
 |---------|----------|--------|
-| .NET 9.0.2 | 300 | — |
-| .NET 10.0.8 | 3 730 | **12.4x** |
-| .NET 10.0.8 + `DOTNET_TieredPGO=0` | 280 | 0.9x |
+| .NET 9.0.20 | 874–890 | — |
+| .NET 9.0.20 + `DOTNET_TieredPGO=0` | 857 | 0.98x |
+| .NET 10.0.12 | 7 250–7 690 | **~8.5x** |
+| .NET 10.0.12 + `DOTNET_TieredPGO=0` | 1 000–1 010 | 1.14x |
 
-macOS arm64, 5 rounds of 2 000 queries, steady state. On Linux x64 (.NET 9.0.20 vs .NET 10.0.12) the same repro gives 968 vs 9 380 us/query, and 1 146 with `DOTNET_TieredPGO=0`.
+The flag leaves .NET 9 unchanged, so it is not a general speed-up — it specifically removes this regression.
 
-Setting `DOTNET_TieredPGO=0` on .NET 9 changes nothing (278 us/query), so the flag is not a general speed-up — it specifically removes this regression.
+Every push and pull request runs all four configurations; the numbers above come from [this run](https://github.com/korchak-aleksandr/net10-regression-repro/actions/runs/36846237059). Because the regression does not depend on core count, free 4-vCPU runners are enough to measure it.
 
 ## How to Run
 
@@ -54,7 +57,7 @@ On the real test suite this showed up as a 3.5x slowdown that survived the 10.0.
 
 # 2. GenericsHelpers Lock Contention under Parallel LINQ
 
-**Status:** [PR #129592](https://github.com/dotnet/runtime/pull/129592) shipped in **10.0.12**. [dotnet/runtime#123124](https://github.com/dotnet/runtime/issues/123124) is still open. Our suite was still 3.5x slower on 10.0.12 — but that remainder turned out to be repro 1 above, a different regression.
+**Status:** [PR #129592](https://github.com/dotnet/runtime/pull/129592) shipped in **10.0.12**. [dotnet/runtime#123124](https://github.com/dotnet/runtime/issues/123124) is still open. Our test suite was still 3.5x slower on 10.0.12 — but that remainder turned out to be repro 1 above, a different regression.
 
 A throughput regression in parallel LINQ workloads on Linux.
 
@@ -91,10 +94,11 @@ dotnet run --project Benchmark.csproj -c Release --framework net10.0 --no-build
 
 > **Note: regression magnitude scales with CPU count.**
 > The `GenericsHelpers` lock contention grows with the number of threads competing simultaneously.
-> On GitHub Actions `ubuntu-latest` (2 vCPU) the regression is ~1.2x.
 > On a 24-vCPU Kubernetes pod (logs above) it is **2x**.
 > On 32-core GitLab CI workers running the full test suite it reaches **~6x**.
 > The benchmark prints logical CPU count in its output for easy comparison.
+
+**Do not read the GitHub Actions runs of this benchmark as a measurement.** On 4 vCPU the effect is below run-to-run variance: two consecutive runs of the identical configuration gave 1.57x and 0.81x, the latter meaning .NET 10 came out faster. The workflow is kept as a build-and-run smoke test only. Measuring this regression needs a high-core-count machine — the Kubernetes logs above, or your own.
 
 ## What the Benchmark Does
 
