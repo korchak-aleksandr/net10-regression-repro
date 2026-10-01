@@ -1,4 +1,4 @@
-name: GenericsHelpers benchmark
+name: LINQ stub benchmark
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 defaults:
   run:
-    working-directory: generics-helpers-lock
+    working-directory: linq-stub-pgo
 
 jobs:
   bench:
@@ -21,6 +21,9 @@ jobs:
           - label: net9.0
             framework: net9.0
             tiered_pgo: "1"
+          - label: net9.0 + TieredPGO=0
+            framework: net9.0
+            tiered_pgo: "0"
           - label: net10.0
             framework: net10.0
             tiered_pgo: "1"
@@ -36,13 +39,10 @@ jobs:
             9.0.x
             10.0.x
 
-      - name: Generate BenchmarkData.cs
-        run: bash generate.sh
-
       - name: Build
-        run: dotnet build Benchmark.csproj -c Release --framework ${{ matrix.framework }}
+        run: dotnet build LinqStubPgo.csproj -c Release --framework ${{ matrix.framework }}
 
       - name: Run benchmark
-        run: dotnet run --project Benchmark.csproj -c Release --framework ${{ matrix.framework }} --no-build
+        run: dotnet run --project LinqStubPgo.csproj -c Release --framework ${{ matrix.framework }} --no-build
         env:
           DOTNET_TieredPGO: ${{ matrix.tiered_pgo }}
